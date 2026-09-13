@@ -92,6 +92,8 @@ async function extractShopeeProduct() {
   // ---------- รูปภาพทั้งหมด: รวม JSON-LD + og:image + สแกน CDN Shopee ในหน้า ----------
   // Shopee ใส่รูป carousel ไว้หลายที่ (JSON-LD มักมีแค่รูปแรก) จึงกวาดจาก <img> และ <script> เพิ่ม
   // ปัญหารูปซ้ำหลายขนาด (เช่น file_abc กับ file_abc_tn) แก้ด้วย normalize เป็น key เดียวกันแล้วเก็บแค่รูปใหญ่สุด
+  // ข้อความ state ที่ unescape แล้ว — เตรียมในบล็อกรูปภาพ แล้วใช้ซ้ำในบล็อกรายละเอียดสินค้า
+  let stateTexts = [];
   (function collectAllImages() {
     const bestByKey = new Map(); // key (file id ที่ normalize แล้ว) -> clean URL รูปใหญ่สุด
 
@@ -162,6 +164,8 @@ async function extractShopeeProduct() {
       u = u.trim().split(' ')[0].replace(/[\\,;)'"]+$/, '');
       if (!/^https?:\/\//i.test(u)) return;
       if (!/susercontent|shopee/i.test(u)) return;
+      if (/\.svg(\?|#|$)/i.test(u)) return; // ไฟล์ vector = ไอคอน UI ไม่ใช่รูปสินค้า
+      if (/:\/\/deo\.shopeemobile\.com/i.test(u)) return; // โฮสต์ไฟล์ static/UI ของ Shopee ไม่ใช่รูปสินค้า
       // ตัด query resize (?w=...&...) ออก — URL สะอาด = รูปต้นฉบับใหญ่สุด
       const clean = u.split('?')[0].split('#')[0];
       if (clean.length < 20) return;
@@ -190,6 +194,8 @@ async function extractShopeeProduct() {
     // วิธีหา: รูปสินค้าหลักคือ <img> ที่แสดงใหญ่สุดในช่วงบนของหน้า แล้วเก็บทุก <img> ในกรอบเดียวกัน
     try {
       const isProductImg = (u) => u && /susercontent|shopee/i.test(u)
+        && !/\.svg(\?|#|$)/i.test(u)
+        && !/:\/\/deo\.shopeemobile\.com/i.test(u)
         && !/avatar|icon|logo|badge|voucher|banner|star|rating|placeholder|spinner|loading/i.test(u);
       const allImgs = Array.from(document.querySelectorAll('img'));
       const vh = window.innerHeight || 800;
@@ -244,22 +250,41 @@ async function extractShopeeProduct() {
       const urlRe = /https?:\/\/[^\s"'\\<>]+\.(?:jpg|jpeg|png|webp)/gi;
       const suserRe = /https?:\/\/[^\s"'\\<>]*susercontent[^\s"'\\<>]*/gi;
       const scanSlice = (slice) => {
+        // เอาเฉพาะ URL ที่เป็นค่าของ key รูปภาพ (image/images/cover/thumbnail/poster/src)
+        // ไม่กวาด URL ลอยๆ ทั้งก้อนแล้ว เพราะจะดูด avatar ร้าน / ไอคอน UI ปนมาด้วย
         if (!slice) return;
         let m;
-        urlRe.lastIndex = 0;
-        while ((m = urlRe.exec(slice)) !== null) {
-          pushImg(m[0]);
-          if (bestByKey.size >= 50) break;
+        const keyRe = /\"(?:images?|cover|thumbnail|thumb|poster|src)\"\s*:\s*\"(https?:\/\/[^\"\\]+)\"/gi;
+        keyRe.lastIndex = 0;
+        while ((m = keyRe.exec(slice)) !== null) {
+          pushImg(m[1]);
+          if (bestByKey.size >= 50) return;
         }
-        suserRe.lastIndex = 0;
-        while ((m = suserRe.exec(slice)) !== null) {
-          // ตัดอักขระต่อท้ายที่ติดมาจาก JSON (เช่น \ , ; ) ออก
-          pushImg(m[0].replace(/[\\,;)]+$/, ''));
-          if (bestByKey.size >= 50) break;
+        // array "images": [...] — ตัดเฉพาะข้างในวงเล็บ
+        const arrRe = /\"images\"\s*:\s*\[/g;
+        let a, taken = 0;
+        while ((a = arrRe.exec(slice)) !== null && taken < 5) {
+          taken++;
+          let depth = 0, end = a.index;
+          for (let i = a.index; i < slice.length && i < a.index + 8000; i++) {
+            if (slice[i] === '[') depth++;
+            else if (slice[i] === ']') { depth--; if (depth === 0) { end = i; break; } }
+          }
+          const inner = slice.slice(a.index, end + 1);
+          urlRe.lastIndex = 0;
+          while ((m = urlRe.exec(inner)) !== null) {
+            pushImg(m[0]);
+            if (bestByKey.size >= 50) return;
+          }
+          suserRe.lastIndex = 0;
+          while ((m = suserRe.exec(inner)) !== null) {
+            pushImg(m[0].replace(/[\\,;)]+$/, ''));
+            if (bestByKey.size >= 50) return;
+          }
         }
       };
       // เตรียมข้อความ (unescape https:\/\/... และ //...) ของสคริปต์ที่มีรูป Shopee
-      const texts = [];
+      stateTexts.length = 0;
       let totalLen = 0;
       for (const s of scripts) {
         let txt = s.textContent || '';
@@ -267,13 +292,13 @@ async function extractShopeeProduct() {
         if (txt.indexOf('susercontent') === -1 && txt.indexOf('shopee') === -1) continue;
         txt = txt.replace(/\\\//g, '/');
         txt = txt.replace(/([^:\/])\/\/(?=[^\"'\\\s<>]*susercontent|[^\"'\\\s<>]*shopee)/gi, '$1https://');
-        texts.push(txt);
+        stateTexts.push(txt);
         totalLen += txt.length;
         if (totalLen > 6000000) break;
       }
       if (itemId) {
         // หน้าต่างรอบ itemId ทุกจุด (±8000 ตัวอักษร) — ตรงนี้มีรูปรายการ + รูปตัวเลือกของสินค้าตัวนี้
-        for (const txt of texts) {
+        for (const txt of stateTexts) {
           let idx = -1, found = 0;
           while ((idx = txt.indexOf(itemId, idx + 1)) !== -1 && found < 5) {
             const before = txt[idx - 1] || '', after = txt[idx + itemId.length] || '';
@@ -288,7 +313,7 @@ async function extractShopeeProduct() {
       // ถ้ายังได้น้อย (เช่น URL ไม่มี itemId) → เอา array "images" ชุดแรกของ state ก้อนใหญ่สุด (มักคือ carousel สินค้าหลัก)
       if (bestByKey.size < 2) {
         let biggest = '';
-        for (const txt of texts) if (txt.length > biggest.length) biggest = txt;
+        for (const txt of stateTexts) if (txt.length > biggest.length) biggest = txt;
         if (biggest) {
           const re = /\"images\"\s*:\s*\[/g;
           let m, taken = 0;
@@ -313,18 +338,92 @@ async function extractShopeeProduct() {
   })();
   result.image = result.images && result.images.length > 0 ? result.images[0] : null;
 
-  // ---------- รายละเอียดสินค้า + รีวิว: ใช้ selector ที่ผู้ใช้เลือกไว้ล่วงหน้า (ถ้ามี) ----------
+  // ---------- รายละเอียดสินค้า: กดขยาย + รวมหลายแหล่งแล้วเอาอันยาวสุด ----------
   try {
     const stored = await chrome.storage.local.get(['reviewSelector', 'descriptionSelector']);
+    const descCandidates = [];
 
+    // 1) กดปุ่ม "ดูเพิ่มเติม" ให้เองก่อนอ่าน (เผื่อผู้ใช้ลืมกด — รายละเอียดจะได้ครบ)
+    try {
+      const vh = window.innerHeight || 800;
+      const moreBtns = Array.from(document.querySelectorAll('button, span, div, a'))
+        .filter(el => /^(ดูเพิ่มเติม|เพิ่มเติม|see more|more|expand)$/i.test((el.innerText || '').trim())
+          && el.offsetParent !== null);
+      for (const btn of moreBtns.slice(0, 10)) {
+        try {
+          const r = btn.getBoundingClientRect();
+          if (r && r.top > 0 && r.top < vh * 3) btn.click();
+        } catch (e) { /* กดไม่ได้ก็ข้าม */ }
+      }
+      if (moreBtns.length) await new Promise(res => setTimeout(res, 600));
+    } catch (e) { /* ขยายไม่ได้ก็อ่านเท่าที่มี */ }
+
+    // 2) element ที่ผู้ใช้เลือกไว้ (ถ้าข้อความถูก clamp ให้ขยับขึ้นหาตัวแม่ที่ยาวกว่า)
     if (stored.descriptionSelector) {
-      const el = document.querySelector(stored.descriptionSelector);
-      if (el) result.description = el.innerText.trim();
+      try {
+        const el = document.querySelector(stored.descriptionSelector);
+        if (el) {
+          let best = (el.innerText || '').trim();
+          let p = el.parentElement, depth = 0;
+          while (p && depth < 3) {
+            const t = (p.innerText || '').trim();
+            if (t.length > best.length && t.length < best.length + 5000) best = t;
+            p = p.parentElement; depth++;
+          }
+          if (best) descCandidates.push(best);
+        }
+      } catch (e) { /* selector เสียก็ข้าม */ }
     }
-    if (!result.description) {
-      // fallback: og:description (สั้นกว่าของจริงมาก แต่ดีกว่าไม่มีเลย)
+
+    // 3) รายละเอียดฉบับเต็มจาก state ที่ Shopee ฝังไว้ (เทียบ itemId) — แหล่งนี้มักครบสุด
+    try {
+      const urlM = (window.location.href || '').match(/-i\.(\d+)\.(\d+)/);
+      const itemId = urlM ? urlM[2] : null;
+      const unescapeJsonStr = (s) => s
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+        .replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, ' ')
+        .replace(/\\\//g, '/').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      const descRe = /\"description\"\s*:\s*\"((?:[^\"\\]|\\.){50,15000})\"/g;
+      const consider = (txt) => {
+        let m; descRe.lastIndex = 0;
+        while ((m = descRe.exec(txt)) !== null) {
+          let d = '';
+          try { d = unescapeJsonStr(m[1]).replace(/<[^>]+>/g, ' ').replace(/[ \t]+\n/g, '\n').trim(); }
+          catch (e) { continue; }
+          if (d.length >= 50) descCandidates.push(d);
+          if (descCandidates.length >= 10) break;
+        }
+      };
+      if (itemId) {
+        for (const txt of stateTexts) {
+          let idx = -1, found = 0;
+          while ((idx = txt.indexOf(itemId, idx + 1)) !== -1 && found < 5) {
+            const before = txt[idx - 1] || '', after = txt[idx + itemId.length] || '';
+            if (/\d/.test(before) || /\d/.test(after)) continue;
+            found++;
+            consider(txt.slice(Math.max(0, idx - 12000), idx + 12000));
+          }
+        }
+      }
+      if (!descCandidates.length) {
+        let biggest = '';
+        for (const txt of stateTexts) if (txt.length > biggest.length) biggest = txt;
+        if (biggest) consider(biggest.slice(0, 200000));
+      }
+    } catch (e) {
+      console.warn('description state scan error', e);
+    }
+
+    // 4) fallback สุดท้าย: og:description (สั้น แต่ดีกว่าไม่มีเลย)
+    if (!descCandidates.length) {
       const ogDesc = document.querySelector('meta[property="og:description"]');
-      if (ogDesc && ogDesc.content) result.description = ogDesc.content;
+      if (ogDesc && ogDesc.content) descCandidates.push(ogDesc.content);
+    }
+
+    // เอาอันยาวสุด (ฉบับเต็มมักยาวสุด) ตัดเพดานกันเซลล์ล้น
+    if (descCandidates.length) {
+      descCandidates.sort((a, b) => b.length - a.length);
+      result.description = descCandidates[0].slice(0, 15000);
     }
 
     if (stored.reviewSelector) {
