@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Product Extractor (ส่วนตัว)",
+  "version": "1.0.0",
+  "description": "อ่านข้อมูลสินค้า (ชื่อ ราคา ยอดขาย ดาว รีวิว) จากหน้า Shopee ที่เปิดอยู่ในแท็บปัจจุบัน แล้ว copy เป็นตารางสำหรับนำไปทำคอนเทนต์",
+  "permissions": ["activeTab", "scripting", "clipboardWrite", "storage"],
+  "host_permissions": [
+    "*://shopee.co.th/*",
+    "*://shopee.com/*",
+    "*://*.shopee.co.th/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Shopee Product Extractor"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
