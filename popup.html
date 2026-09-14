@@ -59,8 +59,8 @@
 
   <div style="border-bottom:1px solid #eee; padding-bottom:8px; margin-bottom:10px;">
     <div style="font-size:11px; font-weight:bold; color:#555; margin-bottom:4px;">🎯 ตั้งค่ารายละเอียด/รีวิว (ทำครั้งแรกครั้งเดียว)</div>
-    <button id="pickReviewBtn" class="secondary" style="padding:6px; font-size:12px;">เลือกส่วนรีวิว (คลิกในหน้าเว็บ)</button>
     <button id="pickDescBtn" class="secondary" style="padding:6px; font-size:12px;">เลือกส่วนรายละเอียดสินค้า</button>
+    <button id="pickReviewBtn" class="secondary" style="padding:6px; font-size:12px;">เลือกส่วนรีวิว (คลิกในหน้าเว็บ)</button>
     <div id="pickerStatus" style="font-size:11px; color:#888; margin-top:4px;"></div>
   </div>
 
@@ -74,14 +74,7 @@
     <button id="sendSheetBtn" disabled>📤 ส่งไปที่ Google Sheet</button>
   </div>
 
-  <div>
-    <div style="font-size:12px; font-weight:bold; color:#555; margin-bottom:6px;">หน้าค้นหา/รายการสินค้า (ดึงหลายตัวพร้อมกัน)</div>
-    <button id="extractListBtn">อ่านสินค้าทั้งหมดในหน้านี้</button>
-    <button id="copyListBtn" class="secondary" disabled>คัดลอกเป็นตาราง CSV</button>
-    <button id="sendListSheetBtn" disabled>📤 ส่งทั้งหมดไปที่ Google Sheet</button>
-  </div>
-
-  <div id="result">เปิดหน้าสินค้า หรือหน้าค้นหา Shopee แล้วเลือกปุ่มด้านบน</div>
+  <div id="result">เปิดหน้าสินค้า Shopee แล้วกดปุ่มด้านบน</div>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>

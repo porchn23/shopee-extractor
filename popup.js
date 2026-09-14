@@ -60,8 +60,8 @@ async function activatePicker(mode) {
     func: (m) => startPicker(m),
     args: [mode],
   });
-  // popup จะปิดตัวเองทันทีที่ผู้ใช้ไปคลิกในหน้าเว็บ (พฤติกรรมปกติของ Chrome)
-  // ผลลัพธ์จะถูกบันทึกไว้ใน storage แล้วแสดงตอนเปิด popup ครั้งถัดไป
+  // เปิดเป็น Side Panel จึงค้างอยู่ได้ขณะคลิกเลือกในหน้าเว็บ (ไม่ปิดตัวเองเหมือน popup)
+  // ผลลัพธ์จะถูกบันทึกไว้ใน storage แล้วแสดงสถานะทันทีโดยไม่ต้องเปิดใหม่
 }
 
 pickReviewBtn.addEventListener('click', () => activatePicker('reviews'));
@@ -93,6 +93,8 @@ function formatForClipboard(data) {
   const images = (Array.isArray(data.images) && data.images.length) ? data.images : (data.image ? [data.image] : []);
   const lines = [
     `ชื่อสินค้า: ${data.title || '-'}`,
+    `แพลตฟอร์ม: ${data.platform || '-'}`,
+    `สถานะ: ${data.status || 'N/A'}`,
     `ราคา: ${data.price || '-'}`,
     `ยอดขาย: ${data.sold || '-'}`,
     `ดาว: ${data.ratingStar || '-'}`,
@@ -115,6 +117,8 @@ function renderResult(data) {
   const imgCount = (Array.isArray(data.images) && data.images.length) ? data.images.length : (data.image ? 1 : 0);
   resultDiv.innerHTML = `
     <div class="row"><span class="label">ชื่อ:</span> ${data.title || '-'}</div>
+    <div class="row"><span class="label">แพลตฟอร์ม:</span> ${data.platform || '-'}</div>
+    <div class="row"><span class="label">สถานะ:</span> ${data.status || 'N/A'}</div>
     <div class="row"><span class="label">ราคา:</span> ${data.price || '-'}</div>
     <div class="row"><span class="label">ยอดขาย:</span> ${data.sold || '-'}</div>
     <div class="row"><span class="label">ดาว:</span> ${data.ratingStar || '-'}</div>
@@ -166,73 +170,4 @@ sendSheetBtn.addEventListener('click', async () => {
   statusDiv.textContent = 'กำลังส่งไปที่ Google Sheet...';
   const ok = await sendToSheet(lastData);
   if (ok) statusDiv.textContent = '✅ ส่งไปที่ Google Sheet แล้ว (เปิดชีตดูเพื่อยืนยัน)';
-});
-
-// ---------- หน้าค้นหา/รายการสินค้า (หลายตัวพร้อมกัน) ----------
-const extractListBtn = document.getElementById('extractListBtn');
-const copyListBtn = document.getElementById('copyListBtn');
-const sendListSheetBtn = document.getElementById('sendListSheetBtn');
-let lastList = [];
-
-function renderList(products) {
-  if (!products.length) {
-    resultDiv.textContent = 'ไม่พบสินค้าในหน้านี้ ลองเลื่อนหน้าให้สินค้าโหลดครบก่อนกดใหม่ (Shopee โหลดสินค้าเพิ่มตอนเลื่อนลง)';
-    return;
-  }
-  const rows = products.slice(0, 40).map((p, i) => `
-    <div class="row" style="border-bottom:1px solid #eee; padding-bottom:4px; margin-bottom:4px;">
-      <span class="label">${i + 1}. ${p.title || '(ไม่พบชื่อ)'}</span><br/>
-      ราคา: ${p.price || '-'} | ยอดขาย: ${p.sold || '-'}
-    </div>
-  `).join('');
-  resultDiv.innerHTML = rows;
-}
-
-function toCSV(products) {
-  const header = 'ชื่อสินค้า,ราคา,ยอดขาย,ลิงก์สินค้า,ลิงก์ Affiliate (กรอกเพิ่มเอง),ลิงก์รูปทั้งหมด';
-  const escape = (v) => `"${(v || '').toString().replace(/"/g, '""')}"`;
-  const getImgs = (p) => (Array.isArray(p.images) && p.images.length) ? p.images.join('\n') : (p.image || '');
-  const lines = products.map(p => [escape(p.title), escape(p.price), escape(p.sold), escape(p.url), '', escape(getImgs(p))].join(','));
-  return [header, ...lines].join('\n');
-}
-
-extractListBtn.addEventListener('click', async () => {
-  statusDiv.textContent = 'กำลังอ่าน...';
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  if (!tab.url || !tab.url.includes('shopee')) {
-    resultDiv.textContent = 'กรุณาเปิดหน้าเว็บ Shopee ก่อนใช้งาน';
-    statusDiv.textContent = '';
-    return;
-  }
-
-  try {
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['list-extractor.js'],
-    });
-
-    lastList = result.products || [];
-    renderList(lastList);
-    copyListBtn.disabled = lastList.length === 0;
-    sendListSheetBtn.disabled = lastList.length === 0;
-    statusDiv.textContent = `พบ ${lastList.length} สินค้า (อ่านจาก: ${result.source === 'json-ld-itemlist' ? 'ข้อมูลโครงสร้างหน้า (แม่นยำ)' : 'ข้อความในหน้า (โปรดตรวจสอบอีกครั้ง)'})`;
-  } catch (err) {
-    resultDiv.textContent = 'เกิดข้อผิดพลาด: ' + err.message;
-    statusDiv.textContent = '';
-  }
-});
-
-copyListBtn.addEventListener('click', async () => {
-  if (!lastList.length) return;
-  const csv = toCSV(lastList);
-  await navigator.clipboard.writeText(csv);
-  statusDiv.textContent = `✅ คัดลอก ${lastList.length} รายการเป็น CSV แล้ว วางในไฟล์ Excel หรือแชท Claude ได้เลย`;
-});
-
-sendListSheetBtn.addEventListener('click', async () => {
-  if (!lastList.length) return;
-  statusDiv.textContent = `กำลังส่ง ${lastList.length} รายการไปที่ Google Sheet...`;
-  const ok = await sendToSheet(lastList);
-  if (ok) statusDiv.textContent = `✅ ส่ง ${lastList.length} รายการไปที่ Google Sheet แล้ว`;
 });

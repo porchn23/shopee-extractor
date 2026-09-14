@@ -11,6 +11,8 @@ async function extractShopeeProduct() {
     ratingStar: null,
     ratingCount: null,
     url: window.location.href,
+    platform: null, // "Shopee" / "TikTok" / "Lazada" (ดูจาก hostname)
+    status: 'N/A', // สถานะงาน (ค่าเริ่มต้นให้แก้ใน Sheet ต่อเอง)
     images: [],
     description: null,
     reviews: [],
@@ -358,7 +360,14 @@ async function extractShopeeProduct() {
       if (moreBtns.length) await new Promise(res => setTimeout(res, 600));
     } catch (e) { /* ขยายไม่ได้ก็อ่านเท่าที่มี */ }
 
+    // เตรียม element รีวิวไว้ก่อน — ใช้กันไม่ให้กล่องรายละเอียดควบเอารีวิวมาด้วย
+    let reviewEls = [];
+    try {
+      if (stored.reviewSelector) reviewEls = Array.from(document.querySelectorAll(stored.reviewSelector));
+    } catch (e) { /* selector เสียก็ข้าม */ }
+
     // 2) element ที่ผู้ใช้เลือกไว้ (ถ้าข้อความถูก clamp ให้ขยับขึ้นหาตัวแม่ที่ยาวกว่า)
+    // แต่ข้ามตัวแม่ที่มีรีวิวอยู่ข้างใน (กันรีวิวปนเข้ารายละเอียด)
     if (stored.descriptionSelector) {
       try {
         const el = document.querySelector(stored.descriptionSelector);
@@ -367,7 +376,8 @@ async function extractShopeeProduct() {
           let p = el.parentElement, depth = 0;
           while (p && depth < 3) {
             const t = (p.innerText || '').trim();
-            if (t.length > best.length && t.length < best.length + 5000) best = t;
+            const hasReview = reviewEls.some(r => { try { return p.contains(r); } catch (e) { return false; } });
+            if (!hasReview && t.length > best.length && t.length < best.length + 2000) best = t;
             p = p.parentElement; depth++;
           }
           if (best) descCandidates.push(best);
@@ -439,6 +449,35 @@ async function extractShopeeProduct() {
   } catch (e) {
     console.warn('reading stored selectors failed', e);
   }
+
+  // ---------- กันรีวิวปนในรายละเอียด: ตัดบรรทัดที่เป็นข้อความรีวิวออกจากรายละเอียด ----------
+  try {
+    if (result.description && result.reviews && result.reviews.length) {
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      const reviewKeys = result.reviews
+        .map(r => norm(r).slice(0, 60))
+        .filter(k => k.length >= 15);
+      if (reviewKeys.length) {
+        const kept = result.description.split('\n').filter(line => {
+          const nl = norm(line);
+          if (!nl) return true;
+          return !reviewKeys.some(k => nl.includes(k) || (nl.length >= 40 && k.includes(nl)));
+        });
+        result.description = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      }
+    }
+  } catch (e) {
+    console.warn('description-review cleanup failed', e);
+  }
+
+  // ---------- ระบุแพลตฟอร์มจาก URL (รองรับ Shopee / TikTok / Lazada) ----------
+  try {
+    const host = window.location.hostname || '';
+    if (/tiktok\.com/i.test(host)) result.platform = 'TikTok';
+    else if (/lazada\./i.test(host)) result.platform = 'Lazada';
+    else if (/shopee\./i.test(host)) result.platform = 'Shopee';
+  } catch (e) { /* อ่าน hostname ไม่ได้ก็ใช้ค่าเริ่มต้น */ }
+  if (!result.platform) result.platform = 'Shopee';
 
   return result;
 }

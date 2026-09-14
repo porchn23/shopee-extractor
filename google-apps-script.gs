@@ -13,22 +13,50 @@
 function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const HEADER = [
-    "วันที่บันทึก", "ชื่อสินค้า", "ราคา", "ยอดขาย",
+    "วันที่บันทึก", "แพลตฟอร์ม", "สถานะ", "ชื่อสินค้า", "ราคา", "ยอดขาย",
     "ดาว", "จำนวนรีวิว", "ลิงก์สินค้า", "ลิงก์ Affiliate", "รูปภาพ (รูปแรก)",
     "ลิงก์รูปทั้งหมด", "รายละเอียดสินค้า", "รีวิวจากผู้ซื้อ (รวม)"
   ];
 
-  // สร้างหัวตารางอัตโนมัติถ้ายังไม่มี (แถวแรกว่างอยู่)
+  // สร้างหัวตารางถ้ายังไม่มี; ถ้าชีตเก่าขาดคอลัมน์ไหน ให้แทรกตามตำแหน่ง
+  // (ใช้ insertColumn ข้อมูลแถวเก่าจะถูกดันไปขวาให้ตรงคอลัมน์เดิม ไม่เลื่อนหลุด)
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(HEADER);
   } else {
-    // migrate ชีตเก่าที่มี 11 คอลัมน์ (ไม่มี "ลิงก์รูปทั้งหมด") ให้เป็น schema ใหม่ 자동으로
     try {
-      const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      if (headerRow[0] === "วันที่บันทึก" && headerRow.length !== HEADER.length) {
-        sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
+      const firstCell = String(sheet.getRange(1, 1).getValue());
+      if (firstCell === "วันที่บันทึก") {
+        // 1) rename คอลัมน์เก่าให้ตรง schema ใหม่ก่อน (ข้อมูลแถวเก่าไม่ขยับ)
+        const renames = { "รูปภาพ": "รูปภาพ (รูปแรก)" };
+        let hdr = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+          .map(function (v) { return String(v); });
+        for (let i = 0; i < hdr.length; i++) {
+          const target = renames[hdr[i]];
+          if (target && hdr.indexOf(target) === -1) {
+            sheet.getRange(1, i + 1).setValue(target);
+            hdr[i] = target;
+          }
+        }
+        // 2) แทรกคอลัมน์ที่ขาดตามตำแหน่ง (insertColumn ดันข้อมูลเก่าไปขวาให้ตรงเอง)
+        for (let guard = 0; guard < 20; guard++) {
+          const cur = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+            .map(function (v) { return String(v); });
+          let done = true;
+          for (let i = 0; i < HEADER.length; i++) {
+            if (i < cur.length && cur[i] === HEADER[i]) continue;
+            if (i >= cur.length) {
+              sheet.getRange(1, i + 1).setValue(HEADER[i]); // ต่อท้าย
+            } else {
+              sheet.insertColumnBefore(i + 1); // แทรกแล้วดันข้อมูลเก่าไปขวา
+              sheet.getRange(1, i + 1).setValue(HEADER[i]);
+            }
+            done = false;
+            break; // อ่าน header ใหม่ในรอบถัดไป
+          }
+          if (done) break;
+        }
       }
-    } catch (err) { /* อ่าน header ไม่ได้ก็ข้ามไป */ }
+    } catch (err) { /* อ่าน/แก้ header ไม่ได้ก็ข้ามไป */ }
   }
 
   let data;
@@ -59,6 +87,8 @@ function doPost(e) {
       : "";
     sheet.appendRow([
       new Date(),
+      item.platform || "",
+      item.status || "N/A",
       item.title || "",
       item.price || "",
       item.sold || "",
