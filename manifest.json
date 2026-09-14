@@ -10,6 +10,7 @@
   "side_panel": {
     "default_path": "popup.html"
   },
+  "options_page": "options.html",
   "host_permissions": [
     "*://shopee.co.th/*",
     "*://shopee.com/*",

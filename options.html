@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>ตั้งค่า Shopee Extractor</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 660px; margin: 24px auto; padding: 0 16px; color: #333; }
+    h2 { color: #ee4d2d; }
+    .step { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+    .step h3 { margin: 0 0 8px 0; }
+    ol li { margin-bottom: 6px; }
+    button { background: #ee4d2d; color: #fff; border: none; border-radius: 4px; padding: 8px 14px; cursor: pointer; font-size: 14px; margin: 4px 8px 4px 0; }
+    button:hover { background: #d73211; }
+    button.secondary { background: #555; }
+    button.secondary:hover { background: #333; }
+    input { width: 100%; box-sizing: border-box; padding: 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+    #status { margin: 12px 0; font-size: 14px; }
+    #copyStatus { font-size: 13px; color: #2a7; }
+  </style>
+</head>
+<body>
+  <h2>🛒 ตั้งค่าการเชื่อมต่อ Google Sheet</h2>
+  <p>ทำครั้งเดียวประมาณ 5 นาที หลังจากนั้นกดส่งได้ตลอด</p>
+
+  <div class="step">
+    <h3>ขั้นตอนที่ 1 — สร้างชีต</h3>
+    <ol>
+      <li>กดปุ่มเปิดชีตใหม่ แล้วตั้งชื่อไฟล์ (เช่น <code>Shopee Extractor</code>)</li>
+    </ol>
+    <button id="openSheetBtn">1. เปิด Google Sheet ใหม่</button>
+  </div>
+
+  <div class="step">
+    <h3>ขั้นตอนที่ 2 — วางโค้ด (ในชีตที่เพิ่งสร้าง)</h3>
+    <ol>
+      <li>ในชีตนั้น กดเมนู <code>ส่วนขยาย &gt; Apps Script</code> (ต้องเปิดจากชีตนี้เท่านั้น ห้ามสร้างสคริปต์ลอยๆ)</li>
+      <li>ลบโค้ดเดิมทิ้งทั้งหมด</li>
+      <li>กดปุ่มคัดลอกโค้ดด้านล่าง แล้ววางทับ (<code>Ctrl+V</code>) จากนั้นบันทึก (<code>Ctrl+S</code>)</li>
+    </ol>
+    <button id="copyCodeBtn" class="secondary">คัดลอกโค้ดทั้งหมด</button>
+    <span id="copyStatus"></span>
+  </div>
+
+  <div class="step">
+    <h3>ขั้นตอนที่ 3 — Deploy แล้วเอา URL มาใส่</h3>
+    <ol>
+      <li>ใน Apps Script กด <code>ทำให้ใช้งานได้ &gt; การทำให้ใช้งานได้ใหม่</code> → ประเภท <code>เว็บแอป</code></li>
+      <li>ตั้ง <code>เรียกใช้ในฐานะ: ฉัน</code> / <code>ผู้ที่มีสิทธิ์เข้าถึง: ทุกคน</code> → กด Deploy → อนุญาตสิทธิ์ → คัดลอก URL ที่ลงท้าย <code>/exec</code></li>
+      <li>เช็คว่า Deploy ถูก: เอา URL ไปเปิดในเบราว์เซอร์ ต้องเห็นข้อความ <code>Shopee Extractor API is running</code></li>
+      <li>ถ้าเจอจอแดงตอนอนุญาต ให้เพิ่มเมลตัวเองเป็น Test users ใน Google Cloud Console ก่อน</li>
+      <li>วาง URL ด้านล่าง → บันทึก → กดทดสอบ (จะมีแถวทดสอบ 1 แถวโผล่ในชีต ลบทิ้งได้เลย)</li>
+    </ol>
+    <input id="sheetUrlInput2" type="text" placeholder="https://script.google.com/macros/s/.../exec" />
+    <div style="margin-top:8px;">
+      <button id="saveBtn">บันทึก URL</button>
+      <button id="testBtn" class="secondary">ส่งแถวทดสอบ</button>
+    </div>
+  </div>
+
+  <div class="step">
+    <h3>ค่าเริ่มต้น</h3>
+    <div>สถานะเริ่มต้นของสินค้าใหม่: <input id="defaultStatusInput" type="text" placeholder="N/A" style="width:140px;" /></div>
+    <div style="margin-top:8px;"><button id="saveDefaultsBtn" class="secondary">บันทึกค่าเริ่มต้น</button></div>
+  </div>
+
+  <div id="status"></div>
+  <script src="options.js"></script>
+</body>
+</html>

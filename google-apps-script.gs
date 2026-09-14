@@ -10,6 +10,13 @@
  * 6. เอา URL นั้นไปวางในช่อง "Google Sheet URL" ของ extension (ครั้งเดียว)
  */
 
+function doGet() {
+  // เปิด URL นี้ในเบราว์เซอร์แล้วเห็นข้อความนี้ = Deploy ถูกต้องพร้อมรับข้อมูล
+  return ContentService
+    .createTextOutput("Shopee Extractor API is running. Send product data with POST.")
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
 function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const HEADER = [

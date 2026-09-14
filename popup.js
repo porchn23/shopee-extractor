@@ -20,6 +20,10 @@ saveSheetUrlBtn.addEventListener('click', () => {
   });
 });
 
+document.getElementById('openSetupBtn').addEventListener('click', () => {
+  chrome.runtime.openOptionsPage();
+});
+
 // ---------- Picker: เลือกส่วนรีวิว / รายละเอียดสินค้า ----------
 const pickReviewBtn = document.getElementById('pickReviewBtn');
 const pickDescBtn = document.getElementById('pickDescBtn');
@@ -147,6 +151,11 @@ extractBtn.addEventListener('click', async () => {
     });
 
     lastData = result;
+    // ใช้ค่าสถานะเริ่มต้นที่ตั้งไว้ในหน้าตั้งค่า (ถ้ามี)
+    try {
+      const { defaultStatus } = await chrome.storage.local.get(['defaultStatus']);
+      if (defaultStatus) lastData.status = defaultStatus;
+    } catch (e) { /* ใช้ค่าจากหน้าสินค้าแทน */ }
     renderResult(result);
     copyBtn.disabled = false;
     sendSheetBtn.disabled = false;
