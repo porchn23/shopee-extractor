@@ -13,6 +13,7 @@ async function extractShopeeProduct() {
     url: window.location.href,
     platform: null, // "Shopee" / "TikTok" / "Lazada" (ดูจาก hostname)
     status: 'N/A', // สถานะงาน (ค่าเริ่มต้นให้แก้ใน Sheet ต่อเอง)
+    specifications: { category: '', stock: '', dimension: null, shipsFrom: '' },
     images: [],
     description: null,
     reviews: [],
@@ -38,6 +39,12 @@ async function extractShopeeProduct() {
             if (product.offers) {
               const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
               result.price = offer.price || offer.lowPrice || result.price;
+              if (/InStock/i.test(String(offer.availability || ''))) result.specifications.stock = 'IN STOCK';
+            }
+            if (product.category && !result.specifications.category) {
+              result.specifications.category = Array.isArray(product.category)
+                ? product.category.join(' > ')
+                : String(product.category);
             }
             if (product.aggregateRating) {
               result.ratingStar = product.aggregateRating.ratingValue || null;
@@ -90,6 +97,31 @@ async function extractShopeeProduct() {
   }
 
   if (!result.source) result.source = 'dom-fallback';
+
+  // ---------- ข้อมูลจำเพาะ: หมวดหมู่ / สต็อก / จัดส่งจาก ----------
+  try {
+    const specText = document.body.innerText || '';
+    if (!result.specifications.category) {
+      // breadcrumb: ลิสต์ลิงก์ใน nav ตัวแรกที่มีลิงก์ >= 2 อัน (เช่น Shopee > สุขภาพ > ...)
+      const navs = document.querySelectorAll('nav');
+      for (const nav of navs) {
+        const links = Array.from(nav.querySelectorAll('a'))
+          .map(a => (a.innerText || '').trim()).filter(t => t.length > 1);
+        if (links.length >= 2) { result.specifications.category = links.join(' > '); break; }
+      }
+    }
+    const stockM = specText.match(/มีสินค้าทั้งหมด\s*([\d,]+)/) || specText.match(/เหลือเพียง\s*([\d,]+)/);
+    if (stockM) {
+      const n = parseInt(stockM[1].replace(/,/g, ''), 10);
+      if (!isNaN(n)) result.specifications.stock = n;
+    } else if (!result.specifications.stock && /พร้อมส่ง|in stock/i.test(specText)) {
+      result.specifications.stock = 'IN STOCK';
+    }
+    const shipM = specText.match(/จัดส่งจาก\s*([^\n|]{1,40})/) || specText.match(/ships?\s*from\s*([^\n|]{1,40})/i);
+    if (shipM) result.specifications.shipsFrom = shipM[1].replace(/[|·•].*$/, '').trim();
+  } catch (e) {
+    console.warn('specifications extract failed', e);
+  }
 
   // ---------- รูปภาพทั้งหมด: รวม JSON-LD + og:image + สแกน CDN Shopee ในหน้า ----------
   // Shopee ใส่รูป carousel ไว้หลายที่ (JSON-LD มักมีแค่รูปแรก) จึงกวาดจาก <img> และ <script> เพิ่ม
